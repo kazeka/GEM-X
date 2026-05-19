@@ -39,6 +39,8 @@ def _get_body_params_global(pred: dict) -> dict:
 def _to_numpy(t) -> np.ndarray:
     if isinstance(t, np.ndarray):
         return t
+    if isinstance(t, (list, tuple)):
+        return np.array(t)
     return t.cpu().numpy()
 
 
