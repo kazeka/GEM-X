@@ -31,7 +31,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from gem.utils.anthropometry.landmarks import LANDMARK_SPECS, Ring, AnchorVerticesRing, ScanNarrowest, ScanWidest, find_landmarks
-from gem.utils.anthropometry.measurements import MEASUREMENTS, SomaMeasurer
+from gem.utils.anthropometry.measurements import MEASUREMENTS, MeasurementType, SomaMeasurer
 
 
 def _get_body_params_global(pred: dict) -> dict:
@@ -72,11 +72,43 @@ def _print_table(measurements: dict[str, float]) -> None:
     print("└─────────────────────────────┴───────────┴──────────┘\n")
 
 
+def _slice_contour(verts: np.ndarray, faces: np.ndarray, y_level: float) -> np.ndarray:
+    """
+    Return cross-section contour points at y = y_level, sorted by XZ angle.
+    Suitable for drawing a closed horizontal ring in Plotly.
+    Returns (N+1, 3) with the first point repeated at the end to close the loop.
+    """
+    y = verts[:, 1]
+    v0, v1, v2 = faces[:, 0], faces[:, 1], faces[:, 2]
+    ymin = np.minimum(np.minimum(y[v0], y[v1]), y[v2])
+    ymax = np.maximum(np.maximum(y[v0], y[v1]), y[v2])
+    crossing = np.where((ymin < y_level) & (ymax > y_level))[0]
+
+    pts: list[np.ndarray] = []
+    for fi in crossing:
+        a, b, c = faces[fi]
+        for p, q in ((a, b), (b, c), (c, a)):
+            yp, yq = y[p], y[q]
+            if (yp < y_level) != (yq < y_level):
+                t = (y_level - yp) / (yq - yp)
+                pts.append(verts[p] + t * (verts[q] - verts[p]))
+
+    if not pts:
+        return np.empty((0, 3))
+
+    arr = np.array(pts)
+    center = arr.mean(axis=0)
+    angles = np.arctan2(arr[:, 2] - center[2], arr[:, 0] - center[0])
+    arr = arr[np.argsort(angles)]
+    return np.vstack([arr, arr[:1]])  # close the loop
+
+
 def _build_html(
     verts: np.ndarray,
     faces: np.ndarray,
     joints: np.ndarray,
     landmarks: dict,
+    plane_heights: dict[str, float],
     measurements: dict[str, float],
     dominant: np.ndarray,
     jnames: list[str],
@@ -134,17 +166,31 @@ def _build_html(
                     hovertemplate="%{text}<br>(%{x:.3f}, %{y:.3f}, %{z:.3f})<extra>" + lm_name + "</extra>",
                 )
             )
-            # Connect ring with a loop line
-            loop_v = np.vstack([lm_verts, lm_verts[:1]])
-            fig.add_trace(
-                go.Scatter3d(
-                    x=loop_v[:, 0], y=loop_v[:, 1], z=loop_v[:, 2],
-                    mode="lines",
-                    line=dict(color=colour, width=3, dash="dot"),
-                    hoverinfo="skip",
-                    showlegend=False,
+            # Draw accurate horizontal cross-section contour if plane height is known
+            if lm_name in plane_heights:
+                contour = _slice_contour(verts, faces, plane_heights[lm_name])
+                if len(contour):
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=contour[:, 0], y=contour[:, 1], z=contour[:, 2],
+                            mode="lines",
+                            line=dict(color=colour, width=3),
+                            hoverinfo="skip",
+                            showlegend=False,
+                        )
+                    )
+            else:
+                # Fallback: connect ring vertices with dotted loop
+                loop_v = np.vstack([lm_verts, lm_verts[:1]])
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=loop_v[:, 0], y=loop_v[:, 1], z=loop_v[:, 2],
+                        mode="lines",
+                        line=dict(color=colour, width=3, dash="dot"),
+                        hoverinfo="skip",
+                        showlegend=False,
+                    )
                 )
-            )
         else:
             colour = _POINT_COLOURS.get(lm_name, "#dfe6e9")
             lv = verts[indices]
@@ -177,10 +223,16 @@ def _build_html(
                 continue
             all_idx.extend(v if isinstance(v, list) else [v])
 
-        if not all_idx:
+        # For PLANAR measurements use the exact plane height for the Y coordinate
+        if m_def.type == MeasurementType.PLANAR and m_def.landmarks[0] in plane_heights:
+            lm_name = m_def.landmarks[0]
+            plane_y = plane_heights[lm_name]
+            lm_verts = verts[landmarks[lm_name]] if isinstance(landmarks.get(lm_name), list) else verts[[landmarks[lm_name]]]
+            centroid = np.array([lm_verts[:, 0].mean(), plane_y, lm_verts[:, 2].mean()])
+        elif all_idx:
+            centroid = verts[all_idx].mean(axis=0)
+        else:
             continue
-
-        centroid = verts[all_idx].mean(axis=0)
         label = f"{m_name}<br>{val_m*100:.1f} cm"
         # Offset label to the right (+X)
         fig.add_trace(
@@ -273,7 +325,7 @@ def main() -> None:
     if not args.no_html:
         dominant = _dominant_joint_per_vertex(soma.soma)
         jnames = _joint_names(soma.soma)
-        html = _build_html(verts, faces, joints, measurer.landmarks, results, dominant, jnames)
+        html = _build_html(verts, faces, joints, measurer.landmarks, measurer.plane_heights, results, dominant, jnames)
         html_path = out_dir / "measurements.html"
         html_path.write_text(html)
         print(f"HTML  → {html_path}")
