@@ -34,6 +34,19 @@ from gem.utils.anthropometry.landmarks import LANDMARK_SPECS, Ring, AnchorVertic
 from gem.utils.anthropometry.measurements import MEASUREMENTS, MeasurementType, SomaMeasurer
 
 
+# Ground-truth body measurements (cm) for the sizing-rotate-fps16 subject.
+GROUND_TRUTH: dict[str, float] = {
+    "height":             181.5,
+    "neck circumference":  41.0,
+    "chest circumference": 112.0,
+    "waist circumference":  98.0,
+    "hip circumference":   104.0,
+    "apex adjustment":      28.0,
+    "front length":        117.0,
+    "skirt length":         62.0,
+}
+
+
 def _get_body_params_global(pred: dict) -> dict:
     if "body_params_global" in pred:
         return pred["body_params_global"]
@@ -112,6 +125,7 @@ def _build_html(
     measurements: dict[str, float],
     dominant: np.ndarray,
     jnames: list[str],
+    ground_truth: dict[str, float] | None = None,
 ) -> str:
     try:
         import plotly.graph_objects as go
@@ -233,7 +247,11 @@ def _build_html(
             centroid = verts[all_idx].mean(axis=0)
         else:
             continue
-        label = f"{m_name}<br>{val_m*100:.1f} cm"
+        label = f"{m_name}<br>pred: {val_m*100:.1f} cm"
+        if ground_truth and m_name in ground_truth:
+            gt_cm = ground_truth[m_name]
+            delta = val_m * 100 - gt_cm
+            label += f"<br>GT: {gt_cm:.1f} cm  (Δ{delta:+.1f})"
         # Offset label to the right (+X)
         fig.add_trace(
             go.Scatter3d(
@@ -321,11 +339,25 @@ def main() -> None:
         json.dump({k: round(v, 6) for k, v in results.items()}, f, indent=2)
     print(f"JSON  → {json_path}")
 
+    # ── Console comparison table ───────────────────────────────────────────────
+    shared = [m for m in results if m in GROUND_TRUTH]
+    if shared:
+        print(f"\n{'Measurement':<26} {'Pred':>8} {'GT':>8} {'Δ':>8}")
+        print("─" * 54)
+        for m in results:
+            pred_cm = results[m] * 100
+            row = f"{m:<26} {pred_cm:>7.1f}cm"
+            if m in GROUND_TRUTH:
+                gt_cm = GROUND_TRUTH[m]
+                row += f" {gt_cm:>7.1f}cm {pred_cm - gt_cm:>+7.1f}"
+            print(row)
+        print()
+
     # ── HTML ──────────────────────────────────────────────────────────────────
     if not args.no_html:
         dominant = _dominant_joint_per_vertex(soma.soma)
         jnames = _joint_names(soma.soma)
-        html = _build_html(verts, faces, joints, measurer.landmarks, measurer.plane_heights, results, dominant, jnames)
+        html = _build_html(verts, faces, joints, measurer.landmarks, measurer.plane_heights, results, dominant, jnames, GROUND_TRUTH)
         html_path = out_dir / "measurements.html"
         html_path.write_text(html)
         print(f"HTML  → {html_path}")
