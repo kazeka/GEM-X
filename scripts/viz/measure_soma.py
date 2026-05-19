@@ -159,6 +159,7 @@ def _build_html(
         "CHEST_RING": "#ff6b6b",
         "WAIST_RING": "#ffd93d",
         "HIP_RING":   "#6bcb77",
+        "NECK_RING":  "#74b9ff",
     }
     _POINT_COLOURS = {
         "HEAD_TOP": "#a29bfe",

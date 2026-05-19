@@ -100,6 +100,11 @@ MEASUREMENTS: list[Measurement] = [
         MeasurementType.PLANAR,
         ["HIP_RING"],
     ),
+    Measurement(
+        "neck circumference",
+        MeasurementType.PLANAR,
+        ["NECK_RING"],
+    ),
 ]
 
 
