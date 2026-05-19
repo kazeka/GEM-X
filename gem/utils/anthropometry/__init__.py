@@ -1,6 +1,7 @@
 from gem.utils.anthropometry.landmarks import (
     LANDMARK_SPECS,
     AnchorVerticesRing,
+    FixedVertex,
     MaxY,
     MinY,
     Ring,
@@ -13,6 +14,7 @@ from gem.utils.anthropometry.measurements import MEASUREMENTS, Measurement, Meas
 __all__ = [
     "LANDMARK_SPECS",
     "AnchorVerticesRing",
+    "FixedVertex",
     "MaxY",
     "MinY",
     "Ring",

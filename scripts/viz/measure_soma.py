@@ -30,7 +30,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from gem.utils.anthropometry.landmarks import LANDMARK_SPECS, Ring, AnchorVerticesRing, ScanNarrowest, ScanWidest, find_landmarks
+from gem.utils.anthropometry.landmarks import LANDMARK_SPECS, Ring, AnchorVerticesRing, ScanNarrowest, ScanWidest, FixedVertex, find_landmarks
 from gem.utils.anthropometry.measurements import MEASUREMENTS, MeasurementType, SomaMeasurer
 
 
@@ -162,8 +162,13 @@ def _build_html(
         "NECK_RING":  "#74b9ff",
     }
     _POINT_COLOURS = {
-        "HEAD_TOP": "#a29bfe",
-        "HEEL":     "#74b9ff",
+        "HEAD_TOP":           "#a29bfe",
+        "HEEL":               "#74b9ff",
+        "TOP_LEFT_SHOULDER":  "#fd79a8",
+        "APEX_LEFT":          "#e17055",
+        "FRONT_END":          "#fdcb6e",
+        "SKIRT_TOP":          "#00cec9",
+        "SKIRT_BOTTOM":       "#55efc4",
     }
 
     # ── Landmark spheres ──────────────────────────────────────────────────────

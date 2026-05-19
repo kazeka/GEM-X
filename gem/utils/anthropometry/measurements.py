@@ -105,6 +105,23 @@ MEASUREMENTS: list[Measurement] = [
         MeasurementType.PLANAR,
         ["NECK_RING"],
     ),
+    # --- geodesic length measurements (left-body path) ---
+    Measurement(
+        "apex adjustment",
+        MeasurementType.GEODESIC,
+        ["TOP_LEFT_SHOULDER", "APEX_LEFT"],
+    ),
+    Measurement(
+        "front length",
+        MeasurementType.GEODESIC,
+        ["TOP_LEFT_SHOULDER", "APEX_LEFT", "FRONT_END"],
+    ),
+    # Skirt length: geodesic from left waist (1494) down the left side to below left knee (1652).
+    Measurement(
+        "skirt length",
+        MeasurementType.GEODESIC,
+        ["SKIRT_TOP", "SKIRT_BOTTOM"],
+    ),
 ]
 
 

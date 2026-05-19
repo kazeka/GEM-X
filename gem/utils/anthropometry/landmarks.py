@@ -48,6 +48,13 @@ class MinY:
 
 
 @dataclass
+class FixedVertex:
+    """A single hard-coded vertex index (known anatomical point on the SOMA-X mesh)."""
+
+    idx: int
+
+
+@dataclass
 class Ring:
     """
     N vertices evenly distributed by angle around the body Y-axis at a given height.
@@ -162,7 +169,7 @@ class ScanWidest:
 # Default landmark specs
 # ---------------------------------------------------------------------------
 
-LANDMARK_SPECS: dict[str, MaxY | MinY | Ring | AnchorVerticesRing | ScanNarrowest | ScanWidest] = {
+LANDMARK_SPECS: dict[str, MaxY | MinY | FixedVertex | Ring | AnchorVerticesRing | ScanNarrowest | ScanWidest] = {
     # --- point landmarks ---
     "HEAD_TOP": MaxY(),
     "HEEL": MinY(),
@@ -175,6 +182,12 @@ LANDMARK_SPECS: dict[str, MaxY | MinY | Ring | AnchorVerticesRing | ScanNarrowes
     "HIP_RING": ScanWidest(joint_bottom=0, joint_top=1, n=8),
     # Neck: at the Neck joint (GEM-X joint 4).
     "NECK_RING": Ring(joint_idx=4, y_offset=0.0, n=8, band_width=0.02),
+    # --- fixed anatomical vertices (SOMA-X mesh) ---
+    "TOP_LEFT_SHOULDER": FixedVertex(720),
+    "APEX_LEFT":         FixedVertex(1564),
+    "FRONT_END":         FixedVertex(1649),
+    "SKIRT_TOP":         FixedVertex(1494),   # left waist
+    "SKIRT_BOTTOM":      FixedVertex(1652),   # below left knee
 }
 
 
@@ -261,7 +274,7 @@ def find_landmarks(
     verts: np.ndarray,
     joints: np.ndarray,
     faces: np.ndarray | None = None,
-    specs: dict[str, MaxY | MinY | Ring | AnchorVerticesRing | ScanNarrowest | ScanWidest] | None = None,
+    specs: dict[str, MaxY | MinY | FixedVertex | Ring | AnchorVerticesRing | ScanNarrowest | ScanWidest] | None = None,
 ) -> tuple[dict[str, int | list[int]], dict[str, float]]:
     """
     Resolve landmark specs to vertex indices and plane heights for the given T-pose mesh.
@@ -297,6 +310,9 @@ def find_landmarks(
 
         elif isinstance(spec, MinY):
             landmarks[name] = int(np.argmin(verts[:, 1]))
+
+        elif isinstance(spec, FixedVertex):
+            landmarks[name] = spec.idx
 
         elif isinstance(spec, Ring):
             target_y = float(joints[spec.joint_idx, 1]) + spec.y_offset
