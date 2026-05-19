@@ -30,7 +30,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from gem.utils.anthropometry.landmarks import LANDMARK_SPECS, Ring, find_landmarks
+from gem.utils.anthropometry.landmarks import LANDMARK_SPECS, Ring, AnchorVerticesRing, ScanNarrowest, ScanWidest, find_landmarks
 from gem.utils.anthropometry.measurements import MEASUREMENTS, SomaMeasurer
 
 

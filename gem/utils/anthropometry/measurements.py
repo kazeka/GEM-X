@@ -3,7 +3,7 @@ Body measurement definitions and measurer for the SOMA body model.
 
 To add a new measurement
 ------------------------
-1. (Optional) add any new landmark to ``LANDMARK_SPECS`` in landmarks.py.
+1. (opt) add any new landmark to ``LANDMARK_SPECS`` in landmarks.py.
 2. Append a ``Measurement`` entry to ``MEASUREMENTS``.
 
 Measurement types
@@ -11,25 +11,25 @@ Measurement types
 EUCLIDEAN
     Straight-line distance between two landmark vertices (||A - B||).
     Use for: height, limb lengths.
-
 GEODESIC
     Sum of shortest surface distances between consecutive landmarks.
-    With ``closed=True`` the last landmark connects back to the first,
-    giving a closed-loop measurement (circumference).
-    Use for: chest/waist/hip circumference.
-    Requires: ``gdist`` — install with ``uv pip install gdist``
-              or ``conda install conda-forge::tvb-gdist``.
+    Use for: surface-following paths.
+PLANAR
+    Perimeter of the horizontal (y = constant) mesh cross-section at the
+    plane height stored for the named ring landmark.  This is the physically
+    correct model for a measuring tape held level around the body.
+    Use for: chest / waist / hip circumferences.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from gem.utils.anthropometry.landmarks import LANDMARK_SPECS, find_landmarks
+from gem.utils.anthropometry.landmarks import LANDMARK_SPECS, find_landmarks, _mesh_slice_perimeter
 
 if TYPE_CHECKING:
     pass
@@ -43,6 +43,7 @@ if TYPE_CHECKING:
 class MeasurementType(Enum):
     EUCLIDEAN = "euclidean"
     GEODESIC = "geodesic"
+    PLANAR = "planar"
 
 
 @dataclass
@@ -55,15 +56,17 @@ class Measurement:
     name:
         Human-readable name (e.g. ``"chest circumference"``).
     type:
-        ``EUCLIDEAN`` or ``GEODESIC``.
+        ``EUCLIDEAN``, ``GEODESIC``, or ``PLANAR``.
     landmarks:
         For EUCLIDEAN: exactly two landmark names, e.g. ``["HEAD_TOP", "HEEL"]``.
         For GEODESIC: one or more landmark names.  Each name that resolves to a
         *list* of indices (Ring) is expanded in order, so
         ``["CHEST_RING"]`` expands to all 8 ring vertices.
+        For PLANAR: exactly one ring landmark name whose ``plane_height`` defines
+        the cross-section Y level.
     closed:
         If True (circumferences), append ``landmarks[0]`` at the end so the
-        geodesic loop closes.
+        geodesic loop closes.  Not used for PLANAR.
     """
 
     name: str
@@ -84,21 +87,18 @@ MEASUREMENTS: list[Measurement] = [
     ),
     Measurement(
         "chest circumference",
-        MeasurementType.GEODESIC,
+        MeasurementType.PLANAR,
         ["CHEST_RING"],
-        closed=True,
     ),
     Measurement(
         "waist circumference",
-        MeasurementType.GEODESIC,
+        MeasurementType.PLANAR,
         ["WAIST_RING"],
-        closed=True,
     ),
     Measurement(
         "hip circumference",
-        MeasurementType.GEODESIC,
+        MeasurementType.PLANAR,
         ["HIP_RING"],
-        closed=True,
     ),
 ]
 
@@ -121,7 +121,7 @@ class SomaMeasurer:
     joints:
         (77, 3) numpy array of joint positions in metres.
     landmark_specs:
-        Override the default landmark specs from landmarks.py.
+        Override the default landmark spec dict (``LANDMARK_SPECS``).
     """
 
     def __init__(
@@ -134,19 +134,16 @@ class SomaMeasurer:
         self.verts = np.asarray(verts, dtype=np.float64)
         self.faces = np.asarray(faces, dtype=np.int32)
         self.joints = np.asarray(joints, dtype=np.float64)
-        self.landmarks = find_landmarks(verts, joints, landmark_specs)
+        self.landmarks, self.plane_heights = find_landmarks(
+            self.verts, self.joints, self.faces, landmark_specs
+        )
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def measure_all(
-        self,
-        measurements: list[Measurement] | None = None,
-    ) -> dict[str, float]:
-        """
-        Return ``{measurement_name: value_in_metres}`` for all measurements.
-        """
+    def measure_all(self, measurements: list[Measurement] | None = None) -> dict[str, float]:
+        """Return {measurement_name: value_in_metres} for every measurement."""
         if measurements is None:
             measurements = MEASUREMENTS
         return {m.name: self._measure(m) for m in measurements}
@@ -167,9 +164,8 @@ class SomaMeasurer:
     # ------------------------------------------------------------------
 
     def _measure(self, m: Measurement) -> float:
-        indices = self.resolve_indices(m.landmarks)
-
         if m.type == MeasurementType.EUCLIDEAN:
+            indices = self.resolve_indices(m.landmarks)
             if len(indices) != 2:
                 raise ValueError(
                     f"EUCLIDEAN measurement '{m.name}' requires exactly 2 "
@@ -178,7 +174,23 @@ class SomaMeasurer:
             return float(np.linalg.norm(self.verts[indices[0]] - self.verts[indices[1]]))
 
         elif m.type == MeasurementType.GEODESIC:
+            indices = self.resolve_indices(m.landmarks)
             return self._geodesic_length(indices, closed=m.closed)
+
+        elif m.type == MeasurementType.PLANAR:
+            if len(m.landmarks) != 1:
+                raise ValueError(
+                    f"PLANAR measurement '{m.name}' requires exactly 1 landmark name, "
+                    f"got {len(m.landmarks)}."
+                )
+            lm_name = m.landmarks[0]
+            if lm_name not in self.plane_heights:
+                raise ValueError(
+                    f"Landmark '{lm_name}' has no associated plane height.  "
+                    "Use a ring-type landmark spec (Ring, AnchorVerticesRing, "
+                    "ScanNarrowest, or ScanWidest)."
+                )
+            return _mesh_slice_perimeter(self.verts, self.faces, self.plane_heights[lm_name])
 
         else:
             raise ValueError(f"Unknown measurement type: {m.type}")
