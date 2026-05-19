@@ -348,15 +348,17 @@ def main() -> None:
     # ── Console comparison table ───────────────────────────────────────────────
     shared = [m for m in results if m in GROUND_TRUTH]
     if shared:
-        print(f"\n{'Measurement':<26} {'Pred':>8} {'GT':>8} {'Δ':>8}")
-        print("─" * 54)
+        print(f"\n{'Measurement':<26} {'Pred':>8} {'GT':>8} {'Δ cm':>8} {'Δ %':>7}")
+        print("─" * 62)
         for m in results:
             pred_cm = results[m] * 100
-            row = f"{m:<26} {pred_cm:>7.1f}cm"
             if m in GROUND_TRUTH:
                 gt_cm = GROUND_TRUTH[m]
-                row += f" {gt_cm:>7.1f}cm {pred_cm - gt_cm:>+7.1f}"
-            print(row)
+                delta = pred_cm - gt_cm
+                pct = delta / gt_cm * 100
+                print(f"{m:<26} {pred_cm:>7.1f}cm {gt_cm:>7.1f}cm {delta:>+7.1f} {pct:>+6.1f}%")
+            else:
+                print(f"{m:<26} {pred_cm:>7.1f}cm")
         print()
 
     # ── HTML ──────────────────────────────────────────────────────────────────
