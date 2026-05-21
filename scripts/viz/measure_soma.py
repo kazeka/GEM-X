@@ -433,15 +433,23 @@ def main() -> None:
     # ── Console comparison table ───────────────────────────────────────────────
     shared = [m for m in results if m in GROUND_TRUTH]
     if shared:
-        print(f"\n{'Measurement':<26} {'Pred':>8} {'GT':>8} {'Δ cm':>8} {'Δ %':>7}")
-        print("─" * 62)
+        # Height scale factor: normalises all predictions to GT body size.
+        if "height" in results and "height" in GROUND_TRUTH:
+            h_scale = GROUND_TRUTH["height"] / (results["height"] * 100.0)
+        else:
+            h_scale = 1.0
+
+        print(f"\n{'Measurement':<26} {'Pred':>9} {'GT':>9} {'Δ cm':>7} {'Δ %':>6}  {'AdjΔcm':>7} {'AdjΔ%':>6}")
+        print("─" * 80)
         for m in results:
             pred_cm = results[m] * 100
             if m in GROUND_TRUTH:
                 gt_cm = GROUND_TRUTH[m]
                 delta = pred_cm - gt_cm
                 pct = delta / gt_cm * 100
-                print(f"{m:<26} {pred_cm:>7.1f}cm {gt_cm:>7.1f}cm {delta:>+7.1f} {pct:>+6.1f}%")
+                adj_delta = pred_cm * h_scale - gt_cm
+                adj_pct = adj_delta / gt_cm * 100
+                print(f"{m:<26} {pred_cm:>7.1f}cm {gt_cm:>7.1f}cm {delta:>+7.1f} {pct:>+5.1f}%  {adj_delta:>+7.1f} {adj_pct:>+5.1f}%")
             else:
                 print(f"{m:<26} {pred_cm:>7.1f}cm")
         print()
