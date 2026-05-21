@@ -383,10 +383,17 @@ def main() -> None:
     parser.add_argument("--output_dir", default=None,
                         help="Directory for output files (default: same dir as hpe_results.pt)")
     parser.add_argument("--no_html", action="store_true", help="Skip HTML output")
+    parser.add_argument("--ground_truth", default=None,
+                        help="Path to JSON file with ground-truth measurements (cm); overwrites built-in GROUND_TRUTH")
     args = parser.parse_args()
 
     out_dir = Path(args.output_dir) if args.output_dir else Path(args.hpe_results).parent
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    ground_truth = GROUND_TRUTH
+    if args.ground_truth:
+        with open(args.ground_truth) as f:
+            ground_truth = json.load(f)
 
     # ── Load predictions ──────────────────────────────────────────────────────
     pred = torch.load(args.hpe_results, map_location="cpu", weights_only=False)
@@ -431,11 +438,11 @@ def main() -> None:
     print(f"JSON  → {json_path}")
 
     # ── Console comparison table ───────────────────────────────────────────────
-    shared = [m for m in results if m in GROUND_TRUTH]
+    shared = [m for m in results if m in ground_truth]
     if shared:
         # Height scale factor: normalises all predictions to GT body size.
-        if "height" in results and "height" in GROUND_TRUTH:
-            h_scale = GROUND_TRUTH["height"] / (results["height"] * 100.0)
+        if "height" in results and "height" in ground_truth:
+            h_scale = ground_truth["height"] / (results["height"] * 100.0)
         else:
             h_scale = 1.0
 
@@ -443,8 +450,8 @@ def main() -> None:
         print("─" * 80)
         for m in results:
             pred_cm = results[m] * 100
-            if m in GROUND_TRUTH:
-                gt_cm = GROUND_TRUTH[m]
+            if m in ground_truth:
+                gt_cm = ground_truth[m]
                 delta = pred_cm - gt_cm
                 pct = delta / gt_cm * 100
                 adj_delta = pred_cm * h_scale - gt_cm
@@ -458,7 +465,9 @@ def main() -> None:
     if not args.no_html:
         dominant = _dominant_joint_per_vertex(soma.soma)
         jnames = _joint_names(soma.soma)
-        html = _build_html(verts, faces, joints, measurer.landmarks, measurer.plane_heights, results, dominant, jnames, GROUND_TRUTH)
+
+
+        html = _build_html(verts, faces, joints, measurer.landmarks, measurer.plane_heights, results, dominant, jnames, ground_truth)
         html_path = out_dir / "measurements.html"
         html_path.write_text(html)
         print(f"HTML  → {html_path}")
