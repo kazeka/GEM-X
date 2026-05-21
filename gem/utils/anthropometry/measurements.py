@@ -102,8 +102,9 @@ MEASUREMENTS: list[Measurement] = [
     ),
     Measurement(
         "neck circumference",
-        MeasurementType.PLANAR,
-        ["NECK_RING"],
+        MeasurementType.GEODESIC,
+        ["BELOW_ADAMS_APPLE", "BACK_NECK"],
+        closed=True,
     ),
     # --- geodesic length measurements (left-body path) ---
     Measurement(

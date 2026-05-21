@@ -116,6 +116,57 @@ def _slice_contour(verts: np.ndarray, faces: np.ndarray, y_level: float) -> np.n
     return np.vstack([arr, arr[:1]])  # close the loop
 
 
+def _geodesic_path_verts(
+    verts: np.ndarray,
+    faces: np.ndarray,
+    src_idx: int,
+    tgt_idx: int,
+) -> np.ndarray:
+    """
+    Return mesh vertex positions along the geodesic path from src_idx to tgt_idx.
+
+    Uses gdist.compute_gdist (fast marching from src) to get the exact geodesic
+    distance field, then traces back from tgt via gradient descent on the vertex
+    adjacency graph.  The result closely approximates the true geodesic curve on
+    the mesh surface.
+    """
+    try:
+        import gdist
+    except ImportError:
+        return np.empty((0, 3))
+
+    dists = gdist.compute_gdist(
+        np.ascontiguousarray(verts, dtype=np.float64),
+        np.ascontiguousarray(faces, dtype=np.int32),
+        np.array([src_idx], dtype=np.int32),
+    )
+
+    adj: list[list[int]] = [[] for _ in range(len(verts))]
+    for f in faces:
+        a, b, c = int(f[0]), int(f[1]), int(f[2])
+        adj[a] += [b, c]
+        adj[b] += [a, c]
+        adj[c] += [a, b]
+
+    path: list[int] = [tgt_idx]
+    seen: set[int] = {tgt_idx}
+    cur = tgt_idx
+    for _ in range(len(verts)):
+        if cur == src_idx:
+            break
+        nbrs = [v for v in adj[cur] if v not in seen]
+        if not nbrs:
+            break
+        nxt = min(nbrs, key=lambda v: dists[v])
+        if dists[nxt] >= dists[cur]:
+            break
+        path.append(nxt)
+        seen.add(nxt)
+        cur = nxt
+
+    return verts[path]
+
+
 def _build_html(
     verts: np.ndarray,
     faces: np.ndarray,
@@ -159,11 +210,12 @@ def _build_html(
         "CHEST_RING": "#ff6b6b",
         "WAIST_RING": "#ffd93d",
         "HIP_RING":   "#6bcb77",
-        "NECK_RING":  "#74b9ff",
     }
     _POINT_COLOURS = {
         "HEAD_TOP":           "#a29bfe",
         "HEEL":               "#74b9ff",
+        "BELOW_ADAMS_APPLE":  "#74b9ff",
+        "BACK_NECK":          "#81ecec",
         "TOP_LEFT_SHOULDER":  "#fd79a8",
         "APEX_LEFT":          "#e17055",
         "FRONT_END":          "#fdcb6e",
@@ -227,6 +279,39 @@ def _build_html(
                     hovertemplate=f"v{indices}<br>(%{{x:.3f}}, %{{y:.3f}}, %{{z:.3f}})<extra>{lm_name}</extra>",
                 )
             )
+
+    # ── Geodesic paths ────────────────────────────────────────────────────────
+    _GEODESIC_COLOURS = {
+        "neck circumference": "#74b9ff",
+        "apex adjustment":    "#e17055",
+        "front length":       "#fdcb6e",
+        "skirt length":       "#55efc4",
+    }
+    for m_def in MEASUREMENTS:
+        if m_def.type != MeasurementType.GEODESIC:
+            continue
+        colour = _GEODESIC_COLOURS.get(m_def.name, "#b2bec3")
+        lm_indices: list[int] = []
+        for lname in m_def.landmarks:
+            v = landmarks.get(lname)
+            if v is None:
+                continue
+            lm_indices.extend(v if isinstance(v, list) else [v])
+        if len(lm_indices) < 2:
+            continue
+        seg_seq = lm_indices + ([lm_indices[0]] if m_def.closed else [])
+        for si in range(len(seg_seq) - 1):
+            pts = _geodesic_path_verts(verts, faces, seg_seq[si], seg_seq[si + 1])
+            if len(pts) < 2:
+                continue
+            fig.add_trace(go.Scatter3d(
+                x=pts[:, 0], y=pts[:, 1], z=pts[:, 2],
+                mode="lines",
+                line=dict(color=colour, width=4),
+                hoverinfo="skip",
+                showlegend=(si == 0),
+                name=m_def.name,
+            ))
 
     # ── Measurement annotations (text labels between landmark centroids) ───────
     for m_name, val_m in measurements.items():

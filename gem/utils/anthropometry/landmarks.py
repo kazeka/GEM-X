@@ -180,9 +180,9 @@ LANDMARK_SPECS: dict[str, MaxY | MinY | FixedVertex | Ring | AnchorVerticesRing 
     "WAIST_RING": ScanNarrowest(joint_bottom=1, joint_top=3, n=8),
     # Hips: widest cross-section between Hips (joint 0) and Spine1 (joint 1).
     "HIP_RING": ScanWidest(joint_bottom=0, joint_top=1, n=8),
-    # Neck: at the Neck joint (GEM-X joint 4).
-    "NECK_RING": Ring(joint_idx=4, y_offset=0.0, n=8, band_width=0.02),
     # --- fixed anatomical vertices (SOMA-X mesh) ---
+    "BELOW_ADAMS_APPLE": FixedVertex(54),    # front of neck, below Adam's apple
+    "BACK_NECK":         FixedVertex(717),   # back of neck (nape)
     "TOP_LEFT_SHOULDER": FixedVertex(720),
     "APEX_LEFT":         FixedVertex(1564),
     "FRONT_END":         FixedVertex(1649),
