@@ -121,7 +121,7 @@ def _copy_video_if_needed(cfg):
             reader = get_video_reader(src)
             writer = get_writer(dst, fps=30, crf=CRF)
             for frame in tqdm(reader, total=get_video_lwh(src)[0], desc="Copy Video"):
-                writer.write_frame(frame)
+                writer.write(frame)
             writer.close()
             reader.close()
         cfg.video_path = str(dst)
