@@ -119,9 +119,9 @@ def _build_cfg(args):
     if args.sam3d_mhr_path is not None:
         overrides.append(f"sam3d_mhr_path={args.sam3d_mhr_path}")
     if args.fov is not None:
-        overrides.append(f"fov_deg={args.fov}")
+        overrides.append(f"+fov_deg={args.fov}")
     if args.use_fov_estimator:
-        overrides.append("use_fov_estimator=true")
+        overrides.append("+use_fov_estimator=true")
 
     with initialize_config_dir(version_base="1.3", config_dir=str(cfg_dir)):
         cfg = compose(config_name="demo_soma", overrides=overrides)
