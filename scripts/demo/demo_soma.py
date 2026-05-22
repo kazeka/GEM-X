@@ -242,7 +242,7 @@ def run_preprocess(cfg):
 def load_data_dict(cfg):
     paths = cfg.paths
     length, width, height = get_video_lwh(cfg.video_path)
-    K_fullimg = estimate_K(width, height).repeat(length, 1, 1)
+    K_fullimg = estimate_K(width, height, fov_deg=cfg.get("fov_deg", None)).repeat(length, 1, 1)
     vitpose = torch.load(paths.vitpose)
     if isinstance(vitpose, tuple):
         vitpose = vitpose[0]

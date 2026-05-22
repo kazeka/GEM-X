@@ -376,6 +376,51 @@ def _build_html(
     return fig.to_html(full_html=True, include_plotlyjs="cdn")
 
 
+def _inspect_shape_params(params: dict, out_dir: Path) -> None:
+    """Write scale_params and identity_coeffs statistics to a JSON debug file."""
+    id_coeffs = params["identity_coeffs"].float().squeeze(0)   # (L, 45)
+    sp = params["scale_params"].float().squeeze(0)              # (L, 69)
+
+    global_scale = sp[:, 0]
+    clamped = global_scale.clamp(min=0.7, max=1.0)
+
+    comp_means = id_coeffs.mean(dim=0)
+    top5_indices = comp_means.abs().topk(5).indices.tolist()
+
+    report = {
+        "num_frames": len(global_scale),
+        "global_scale_raw": {
+            "mean": round(global_scale.mean().item(), 5),
+            "std":  round(global_scale.std().item(), 5),
+            "min":  round(global_scale.min().item(), 5),
+            "max":  round(global_scale.max().item(), 5),
+            "pct_at_ceiling_ge1": round((global_scale >= 1.0).float().mean().item() * 100, 1),
+            "pct_at_floor_le07":  round((global_scale <= 0.7).float().mean().item() * 100, 1),
+        },
+        "global_scale_after_clamp_0_7_to_1_0": {
+            "mean":              round(clamped.mean().item(), 5),
+            "mean_delta_raw_minus_clamped": round((global_scale - clamped).mean().item(), 5),
+        },
+        "identity_coeffs": {
+            "shape": list(id_coeffs.shape),
+            "per_frame_l2_norm_mean": round(id_coeffs.norm(dim=-1).mean().item(), 5),
+            "per_frame_l2_norm_std":  round(id_coeffs.norm(dim=-1).std().item(), 5),
+            "top5_dims_by_abs_mean": {
+                str(i): round(comp_means[i].item(), 5) for i in top5_indices
+            },
+        },
+        "scale_params_other_dims_1_plus": {
+            "mean": round(sp[:, 1:].mean().item(), 5),
+            "std":  round(sp[:, 1:].std().item(), 5),
+        },
+    }
+
+    path = out_dir / "shape_diagnostics.json"
+    with open(path, "w") as f:
+        json.dump(report, f, indent=2)
+    print(f"Shape diagnostics → {path}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Body measurement from hpe_results.pt")
     parser.add_argument("hpe_results", help="Path to hpe_results.pt")
@@ -385,6 +430,8 @@ def main() -> None:
     parser.add_argument("--no_html", action="store_true", help="Skip HTML output")
     parser.add_argument("--ground_truth", default=None,
                         help="Path to JSON file with ground-truth measurements (cm); overwrites built-in GROUND_TRUTH")
+    parser.add_argument("--inspect_shape", action="store_true",
+                        help="Print raw scale_params and identity_coeffs statistics from the prediction")
     args = parser.parse_args()
 
     out_dir = Path(args.output_dir) if args.output_dir else Path(args.hpe_results).parent
@@ -398,6 +445,9 @@ def main() -> None:
     # ── Load predictions ──────────────────────────────────────────────────────
     pred = torch.load(args.hpe_results, map_location="cpu", weights_only=False)
     params = _get_body_params_global(pred)
+
+    if args.inspect_shape:
+        _inspect_shape_params(params, out_dir)
 
     identity_coeffs = params["identity_coeffs"].float().squeeze(0).mean(0, keepdim=True)
     scale_params = params["scale_params"].float().squeeze(0).mean(0, keepdim=True)
