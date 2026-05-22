@@ -97,18 +97,28 @@ def safely_render_x3d_K(x3d, K_fullimg, thr=0.3):
     return perspective_projection(x3d, K_fullimg)
 
 
-def estimate_K(width, height):
-    """Estimate default pinhole intrinsics from image dimensions.
-
-    Uses max(w, h) as focal length — a reasonable approximation when
-    the true focal length is unknown.
+def estimate_K(width, height, fov_deg=None):
+    """Estimate pinhole camera intrinsics from image dimensions.
 
     Args:
-        width, height: image dimensions (int or float)
+        width, height: image dimensions in pixels (int or float).
+        fov_deg: horizontal field-of-view in degrees.  When provided the focal
+            length is derived exactly from ``fov_deg`` and ``width``; otherwise
+            a heuristic of ``focal = width`` is used (~53 ° horizontal FOV).
+            **Portrait note:** always pass the horizontal (width-direction) FOV
+            of the recorded frame.  For a smartphone held in portrait the
+            horizontal FOV is the *narrower* angle (~60 ° for most models),
+            not the 77 ° landscape spec.
+
     Returns:
-        K: (3, 3) camera intrinsics tensor
+        K: (3, 3) camera intrinsics tensor (fx=fy, principal point at centre).
     """
-    focal = float(max(width, height))
+    if fov_deg is not None:
+        focal = float(width) / (2.0 * math.tan(math.radians(fov_deg / 2.0)))
+    else:
+        # Anchor on width so portrait clips (H > W) are not assigned an
+        # artificially long focal length via max(W, H).
+        focal = float(width)
     K = torch.eye(3)
     K[0, 0] = focal
     K[1, 1] = focal
@@ -132,13 +142,15 @@ def resize_K(K, scale):
 
 
 def create_camera_sensor(width, height, fov_deg=60):
-    """Create camera intrinsics from image dimensions and field-of-view angle.
+    """Create pinhole camera intrinsics from image dimensions and horizontal FOV.
 
     Args:
-        width, height: image dimensions
-        fov_deg: horizontal field of view in degrees
+        width, height: image dimensions in pixels.
+        fov_deg: horizontal (width-direction) field-of-view in degrees.
+            Common values: 77 ° landscape smartphone, ~60 ° portrait smartphone
+            (portrait horizontal = landscape vertical), 50–70 ° DSLR.
     Returns:
-        (width, height, K)  where K is (3, 3)
+        (width, height, K) where K is a (3, 3) intrinsics tensor.
     """
     focal = float(width) / (2.0 * math.tan(math.radians(fov_deg / 2.0)))
     K = torch.eye(3)

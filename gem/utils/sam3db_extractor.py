@@ -21,6 +21,9 @@ class SAM3DBExtractor:
         device="cuda:0",
         tqdm_leave=True,
         feature_dim=1024,
+        use_fov_estimator=False,
+        fov_estimator_name="moge2",
+        fov_estimator_path="",
     ):
         self.device = device
         self.tqdm_leave = tqdm_leave
@@ -54,12 +57,17 @@ class SAM3DBExtractor:
         model.cfg.MODEL.DECODER.DO_HAND_DETECT_TOKENS = False
         model.cfg.freeze()
 
+        fov_estimator = None
+        if use_fov_estimator:
+            from tools.build_fov_estimator import FOVEstimator  # type: ignore[reportMissingImports]
+            fov_estimator = FOVEstimator(name=fov_estimator_name, device=device, path=fov_estimator_path)
+
         self.estimator = SAM3DBodyEstimator(
             sam_3d_body_model=model,
             model_cfg=model_cfg,
             human_detector=None,
             human_segmentor=None,
-            fov_estimator=None,
+            fov_estimator=fov_estimator,
         )
         self._patch_model_to_expose_pose_token()
 

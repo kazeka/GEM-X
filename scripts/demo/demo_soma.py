@@ -79,6 +79,20 @@ def _parse_args():
     parser.add_argument("--ckpt", type=str, default=None)
     parser.add_argument("--exp", type=str, default="gem_soma_regression")
     parser.add_argument("--retarget", action="store_true", help="Retarget SOMA motion to G1 robot")
+    parser.add_argument(
+        "--fov",
+        type=float,
+        default=None,
+        help="Horizontal (width-direction) field-of-view of the recording camera in degrees. "
+             "Landscape smartphone: ~77°. Portrait smartphone: ~60° (portrait horizontal = landscape vertical). "
+             "DSLR: 50–70°. If omitted, falls back to focal=width (~53° horizontal FOV).",
+    )
+    parser.add_argument(
+        "--use_fov_estimator",
+        action="store_true",
+        help="Use MoGe2 neural FOV estimator (requires 'moge' package) for automatic per-frame "
+             "focal length estimation. More accurate than --fov but slower.",
+    )
     return parser.parse_args()
 
 
@@ -104,6 +118,10 @@ def _build_cfg(args):
         overrides.append(f"sam3d_ckpt_path={args.sam3d_ckpt_path}")
     if args.sam3d_mhr_path is not None:
         overrides.append(f"sam3d_mhr_path={args.sam3d_mhr_path}")
+    if args.fov is not None:
+        overrides.append(f"fov_deg={args.fov}")
+    if args.use_fov_estimator:
+        overrides.append("use_fov_estimator=true")
 
     with initialize_config_dir(version_base="1.3", config_dir=str(cfg_dir)):
         cfg = compose(config_name="demo_soma", overrides=overrides)
@@ -201,6 +219,7 @@ def run_preprocess(cfg):
             checkpoint_path=cfg.get("sam3d_ckpt_path", None),
             mhr_path=cfg.get("sam3d_mhr_path", None),
             device="cuda:0",
+            use_fov_estimator=cfg.get("use_fov_estimator", False),
         )
         sam3d_results = extractor.extract_video_features(
             video_path,
@@ -208,7 +227,8 @@ def run_preprocess(cfg):
             render_mhr=cfg.render_mhr,
         )
         length = sam3d_results["transls"].shape[0]
-        K_fullimg = estimate_K(W, H).repeat(length, 1, 1)
+        K_base = estimate_K(W, H, fov_deg=cfg.get("fov_deg", None))
+        K_fullimg = K_base.repeat(length, 1, 1)
         pred_cam = get_a_pred_cam(sam3d_results["transls"], bbx_xys, K_fullimg)
         vit_features = {
             "pose_tokens": sam3d_results["pose_tokens"],
